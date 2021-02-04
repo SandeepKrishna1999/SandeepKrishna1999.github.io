@@ -1,0 +1,83 @@
+---
+title: "PredictionAssignment"
+author: "Sandeep Krishna R"
+date: "02/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+This analysis involves the classification and an attempt at accurate prediction of the nature of a personal activity(exercise) performed by different individuals based on a plethora of continuously monitored variables pertinent to these activities.\
+# Data
+Loading the data
+```{r, warning=FALSE, message=FALSE}
+training = read.csv("pml-training.csv")
+testing = read.csv("pml-testing.csv")
+dim(training)
+table(training$classe)
+```
+The dimensions indicate that there are around 160 measurements(predictor variables) and around 19622 observations. The classe is the response variable(nature of exercise), which is a factor with 5 levels.\
+
+# Preprocessing
+## Partitioning the training set
+The training set is split into train and validation sets.
+```{r, warning=FALSE, message=FALSE}
+library(caret)
+set.seed(123)
+inTrain = createDataPartition(training$classe, p = 0.7, list = FALSE)
+train = training[inTrain, ]
+validation = training[-inTrain, ]
+```
+
+## Feature selection
+The variables with near zero variance, more than 40% missing values and descriptive fields are not considered for the analysis.
+```{r, warning=FALSE, message=FALSE}
+nzvcol = nearZeroVar(train)
+train = train[, -nzvcol]
+cntlength <- sapply(train, function(x) {
+  sum(!(is.na(x) | x == ""))
+})
+nullcol <- names(cntlength[cntlength < 0.6 * length(train$classe)])
+descriptcol <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+                 "cvtd_timestamp", "new_window", "num_window")
+excludecols <- c(descriptcol, nullcol)
+train <- train[, !names(train) %in% excludecols]
+```
+
+# Training the model
+We implement the random forest method as it is a suitable tree-based method for classification type problems.
+```{r, warning=FALSE, message=FALSE}
+mod = train(classe~., data = train, method = "rf", ntrees = 10)
+ptrain = predict(mod, train)
+train$classe = as.factor(train$classe)
+confusionMatrix(ptrain, train$classe)
+```
+
+These results indicate that there is very little discrepancy in classifying the activity into the appropriate response class for the training data. But we are interested in the prediction accuracy of the model applied to any new data. Hence we now apply this to the validation set to cross-validate the accuracy obtained.
+```{r, warning=FALSE, message=FALSE}
+pvalidation = predict(mod, validation)
+validation$classe = as.factor(validation$classe)
+confusionMatrix(pvalidation, validation$classe)
+```
+
+The validation set accuracy is 99.35% with a very low p-value. This means that the Out-Of-Bag (OOB) error is very low.\
+Here the 25 variables with the highest importance in the predicted output are shown.
+```{r, warning=FALSE, message=FALSE}
+varobj = varImp(mod)
+plot(varobj, main = "Importance of top 25 variables", top = 25)
+```
+
+# Test set prediction
+```{r, warning=FALSE, message=FALSE}
+ptest = predict(mod, testing)
+ptest
+```
+
+# Conclusion
+The random forest method works best for this problem because:\
+1. It is suitable when handling a large number of predictors and their inter-relationship is unknown.\
+2. It's built-in cross-validation component gives an unbiased estimate.\
+3. The adaptive boosting or other combination of techniques are far more computationally intensive and are proven to produce similar or even lower accuracies in similar problems previously.
